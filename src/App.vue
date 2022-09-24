@@ -1,6 +1,6 @@
 <template>
   <div id="app">
-    <button class="addNew" @click="addNewRow">Add new row</button>
+    <button class="addNew" @click="addNewRow">Добавить новую колонку</button>
     <div class="filter">
       <select class="category" v-model="selectedColumn">
         <option selected disabled value="null">Выберите колонку</option>
@@ -12,10 +12,11 @@
           {{condition.name}}</option>
         <option v-if="selectedColumn=='Название'" value="совпадает">совпадает</option>
       </select>
-      <input v-model="filter" placeholder="Введите фильтр" />
+      <input v-model="filter" placeholder="Введите фильтр" v-on:keyup.enter="addFilter" />
       <button @click="addFilter">Добавить фильтр</button>
     </div>
-    <div class="flex">
+
+    <div class="flex filter-array">
       <h5>Фильтры:</h5>
       <ul class="flex">
         <li class="container" v-for="filter in filterArray">
@@ -36,19 +37,23 @@
               src="./assets/sort.png" width="20px" @click="sortByColumn(column.id)" />
           </div>
         </th>
+        <th>
+        </th>
       </tr>
       <tr v-for="row in tableArrayPage" :key="row.id">
         <td>{{row.date}}</td>
         <td>{{row.name}}</td>
         <td>{{row.amount}}</td>
         <td>{{row.distance}}</td>
+        <td class="delete" @click="deleteRow(row.id)">X</td>
       </tr>
 
     </table>
     <div class="pages">
       <div class="flex">
         <button @click="goToPage(currentPage-1)" class="pages__button">Назад</button>
-        <button class="pages__number" :class="{'pages__number-active':currentPage==page}" v-for="page in pagesNow" @click="goToPage(page)">{{page}}</button>
+        <button class="pages__number" :class="{'pages__number-active':currentPage==page}" v-for="page in pagesNow"
+          @click="goToPage(page)">{{page}}</button>
         <button @click="goToPage(currentPage+1)" class="pages__button">Вперед</button>
       </div>
       <select v-model="pageSize">
@@ -62,24 +67,20 @@
 </template>
 
 <script>
-
-
+import { getEntries, postEntry, deleteEntry } from './assets/api/entry';
 
 export default {
   name: 'App',
-  components: {
-
-  },
   data() {
     return {
-      conditionArray: [{ id: 0, name: "больше" }, { id: 1, name: "меньше" }, { id: 2, name: "равно" }, { id: 3, name: "содержит" }],
+      conditionArray: [{ id: 0, name: "больше" }, { id: 1, name: "меньше" }, { id: 2, name: "равно" }],
       selectedColumn: null,
       selectedCondition: null,
       sortByColumnId: 1,
+      // String from input
       filter: '',
       filterArray: [],
       columnArray: [{ id: 1, name: "Название", sorted: false }, { id: 2, name: "Количество", sorted: false }, { id: 3, name: "Расстояние", sorted: false },],
-      tableArray: [{ id: 1, date: '12/12/12', name: 'name', amount: 145, distance: 23 }, { id: 2, date: '12/12/12', name: 'ame', amount: 1, distance: 123 }, { id: 3, date: '12/12/12', name: 'name', amount: 145, distance: 23 }, { id: 4, date: '12/12/12', name: 'ame', amount: 1, distance: 123 }],
       tableArrayTemp: [],
       tableArrayPage: [],
       pageSize: 5,
@@ -88,52 +89,60 @@ export default {
     }
   },
   mounted() {
-    this.tableArrayTemp = this.tableArray;
+    getEntries().then(response => {
+      this.tableArrayTemp = response.data;
+    })
   },
-  // watch: {
-  //   // эта функция запускается при любом изменении вопроса
-  //   question: function (newQuestion, oldQuestion) {
-  //     this.answer = 'Ожидаю, когда вы закончите печатать...'
-  //     this.debouncedGetAnswer()
-  //   }
-  // },
+  watch: {
+    //if column changed, reset condition
+    selectedColumn() {
+      this.selectedCondition = null;
+    }
+  },
   computed: {
+    //amount of pages
     pagesNow() {
       this.tableArrayPage = this.tableArrayTemp.filter((row, index) => {
         let start = (this.currentPage - 1) * this.pageSize;
         let end = this.currentPage * this.pageSize;
         if (index >= start && index < end) return true;
       })
-      console.log('change')
       return Math.ceil(this.tableArrayTemp.length / this.pageSize)
     }
   },
   methods: {
     goToPage(page) {
-      if(page>0&&page<=Math.ceil(this.tableArrayTemp.length / this.pageSize)){
+      if (page > 0 && page <= Math.ceil(this.tableArrayTemp.length / this.pageSize)) {
         this.currentPage = page;
       }
-      // this.tableArrayPage = this.tableArrayTemp.filter((row, index) => {
-      //   let start = (this.currentPage - 1) * this.pageSize;
-      //   let end = this.currentPage * this.pageSize;
-      //   if (index >= start && index < end) return true;
-      // })
     },
     addNewRow() {
-      this.tableArrayTemp.push({ id: Math.ceil(Math.random() * 1000), date: '12/12/12', name: 'name', amount: Math.random() * 100, distance: Math.random() * 100 });
+      postEntry({ date: new Date().toISOString().split('T')[0], name: (Math.random() + 1).toString(36).substring(2, 6), amount: Math.ceil(Math.random() * 100), distance: Math.ceil(Math.random() * 100) })
+        .then(response => this.tableArrayTemp.push(response.data));
+    },
+    deleteRow(id) {
+      deleteEntry(id).then(response => {
+        console.log(response.data.message);
+        this.tableArrayTemp = this.tableArrayTemp.filter(item => item.id !== id);
+      })
     },
     addFilter() {
       if (this.filter.trim() !== '' && this.selectedColumn !== null && this.selectedCondition !== null) {
-        console.log('addFilter');
-        this.filterArray.push({ column: this.selectedColumn, condition: this.selectedCondition, filterInput: this.filter });
-        this.useFilter({ column: this.selectedColumn, condition: this.selectedCondition, filterInput: this.filter });
+        if (this.selectedColumn !== 'Название') {
+          let regex = /^[0-9]+$/;
+          if (!this.filter.trim().match(regex)) {
+            alert("Неправильный ввод фильтра: используйте число");
+            return false;
+          }
+        }
+        this.filterArray.push({ column: this.selectedColumn, condition: this.selectedCondition, filterInput: this.filter.trim() });
+        this.useFilter({ column: this.selectedColumn, condition: this.selectedCondition, filterInput: this.filter.trim() });
+        this.filter = ''
       }
     },
     useFilter(filter) {
-      console.log(filter)
       switch (filter.column) {
         case 'Название':
-          console.log('name');
           this.tableArrayTemp = this.tableArrayTemp.filter((item) => item.name.toLowerCase().includes(filter.filterInput.toLowerCase()));
           break;
         case "Количество":
@@ -147,7 +156,6 @@ export default {
     compareNums(filter, column) {
       switch (filter.condition) {
         case 'больше':
-          console.log(filter[column]);
           this.tableArrayTemp = this.tableArrayTemp.filter((item) => item[column] >= filter.filterInput);
           break;
         case 'меньше':
@@ -165,7 +173,9 @@ export default {
         }
         return true;
       })
-      this.tableArrayTemp = this.tableArray;
+      getEntries().then(response => {
+        this.tableArrayTemp = response.data;
+      })
       this.filterArray.map((filter) => {
         this.useFilter(filter);
       })
@@ -194,7 +204,6 @@ export default {
               break;
           }
           column.sorted = !column.sorted;
-          console.log('ff')
         }
         return column
       })
@@ -205,7 +214,7 @@ export default {
 
 <style lang="scss">
 #app {
-  font-family:  sans-serif;
+  font-family: sans-serif;
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -213,9 +222,11 @@ export default {
   color: #2c3e50;
   margin-top: 60px;
 }
-.addNew{
+
+.addNew {
   margin-bottom: 5px;
 }
+
 ul {
   list-style-type: none;
   padding: 0;
@@ -228,30 +239,34 @@ ul {
   display: flex;
   flex-direction: row;
 }
-select{
-  height:30px;
+
+select {
+  height: 30px;
   border-radius: 5px;
 }
-input{
-  height:26px;
+
+input {
+  height: 26px;
   margin-right: 5px;
   border-radius: 5px;
   border: 1px solid grey;
 }
+
 .filter {
   margin-bottom: 10px;
   align-items: center;
   display: flex;
   justify-content: center;
-  .category{
-    margin-right:5px;
+
+  .category {
+    margin-right: 5px;
   }
 }
 
 .container {
-  background-color: rgb(145, 232, 232);
-  // width:200px;
-  padding: 4px;
+  background-color: blue;
+  color: white;
+  padding: 5px;
   display: flex;
   justify-content: space-between;
   border: 1px solid cyan;
@@ -284,6 +299,10 @@ table {
 
   }
 
+  .delete {
+    cursor: pointer;
+  }
+
   .column {
     justify-content: space-between;
     align-items: center;
@@ -304,32 +323,42 @@ table {
     background-color: #dddddd;
   }
 }
-button{
+
+button {
   background-color: white;
   font-family: sans-serif;
-    cursor: pointer;
-    font-weight: 400;
-    padding: 5px;
-    color:blue;
-    font-size: 16px;
-    border-radius: 5px;
-    border:0.5px solid blue;
+  cursor: pointer;
+  font-weight: 400;
+  padding: 5px;
+  color: blue;
+  font-size: 16px;
+  border-radius: 5px;
+  border: 0.5px solid blue;
+  transition: 0.3s;
+
+  &:hover {
+    background-color: #6054ca;
+    color: white;
+  }
 }
 
 .pages {
   display: flex;
   justify-content: center;
-  &__number{
+
+  &__number {
     font-weight: 500;
     padding: 5px;
     margin-right: 5px;
-    width:30px;
-    &-active{
+    width: 30px;
+
+    &-active {
       background-color: blue;
-      color:white;
+      color: white;
     }
   }
-  &__button{
+
+  &__button {
     margin-right: 5px;
     border-radius: 5px;
   }
