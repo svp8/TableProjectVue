@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS `entry` (
   id int NOT NULL PRIMARY KEY AUTO_INCREMENT,
   name varchar(255) NOT NULL,
   amount int,
-  distance int
+  distance int,
+  date DATE
 )
 ``` 
 ## Project setup
